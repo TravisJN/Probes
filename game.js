@@ -25,6 +25,107 @@
 			}
 		}, false);
 	}
+
+	//---------------- Game state machine ----------------
+	var GAME_STATE = {
+		TITLE: 'title',
+		LEVEL_SELECT: 'level_select',
+		PLAYING: 'playing',
+		PAUSED: 'paused',
+		WIN: 'win',
+		LOSE: 'lose'
+	};
+
+	var gameState = GAME_STATE.TITLE;
+	var selectedLevelIndex = 0;
+	var currentLevelIndex = 0;
+	var LEVEL_LOADERS = []; // filled after loadLevel* declarations
+	var LEVEL_NAMES = [];
+
+	var unlockedLevelCount = (function () {
+		try {
+			var raw = localStorage.getItem('probes_unlocked_levels');
+			var n = raw != null ? parseInt(raw, 10) : 1;
+			return (isFinite(n) && n > 0) ? n : 1;
+		} catch (e) {
+			return 1;
+		}
+	}());
+
+	function saveUnlockedLevelCount() {
+		try { localStorage.setItem('probes_unlocked_levels', String(unlockedLevelCount)); } catch (e) {}
+	}
+
+	function clampInt(n, min, max) {
+		n = (n | 0);
+		if (n < min) return min;
+		if (n > max) return max;
+		return n;
+	}
+
+	function setGameState(next) {
+		gameState = next;
+	}
+
+	function goToTitle() {
+		setGameState(GAME_STATE.TITLE);
+	}
+
+	function goToLevelSelect() {
+		selectedLevelIndex = clampInt(selectedLevelIndex, 0, Math.max(0, unlockedLevelCount - 1));
+		setGameState(GAME_STATE.LEVEL_SELECT);
+	}
+
+	function startLevel(levelIndex) {
+		var maxIdx = Math.max(0, (LEVEL_LOADERS.length || 1) - 1);
+		currentLevelIndex = clampInt(levelIndex, 0, maxIdx);
+		selectedLevelIndex = currentLevelIndex;
+
+		if (LEVEL_LOADERS[currentLevelIndex]) {
+			LEVEL_LOADERS[currentLevelIndex]();
+		}
+
+		// after the level is loaded, enemies can safely reference planets[0]
+		if (enemies && enemies.length) {
+			for (var i = 0; i < enemies.length; i++) {
+				resetEnemy(enemies[i]);
+			}
+		}
+
+		setGameState(GAME_STATE.PLAYING);
+		// let the level loader decide if firing is allowed (most set canFire=true)
+	}
+
+	function restartLevel() {
+		startLevel(currentLevelIndex);
+	}
+
+	function startSelectedLevel() {
+		startLevel(selectedLevelIndex);
+	}
+
+	function goToNextLevel() {
+		var nextIdx = currentLevelIndex + 1;
+		if (nextIdx >= LEVEL_LOADERS.length) {
+			// end of campaign for now
+			goToLevelSelect();
+			return;
+		}
+		startLevel(nextIdx);
+	}
+
+	function triggerWin() {
+		canFire = false;
+		// unlock next level (if any)
+		unlockedLevelCount = Math.max(unlockedLevelCount, currentLevelIndex + 2);
+		saveUnlockedLevelCount();
+		setGameState(GAME_STATE.WIN);
+	}
+
+	function triggerLose() {
+		canFire = false;
+		setGameState(GAME_STATE.LOSE);
+	}
 		
 		//objects
 		function Ship (x, y) {
@@ -616,14 +717,11 @@
 		context.restore();
 	}
 	
-	function checkWin() {
-		if (flaggedCount === claimsNeeded) {
-			canFire = false;
-			youWin();
-		} 
+	function isWinCondition() {
+		return flaggedCount === claimsNeeded;
 	}
 	
-	function checkLose() {
+	function isLoseCondition() {
 		for (var i = 0; i < flags.length; i++) {
 			var flag = flags[i];
 			if (flag.landed === false) {
@@ -632,70 +730,123 @@
 		}
 		return true;
 	}
-	
-	function youWin() {
+
+	function drawOverlayBox(title, lines, footer, fillStyle) {
+		var boxW = Math.floor(canvas.width * 0.70);
+		var boxH = Math.floor(canvas.height * 0.46);
+		var boxX = Math.floor((canvas.width - boxW) / 2);
+		var boxY = Math.floor((canvas.height - boxH) / 2);
+
 		context.save();
 		context.beginPath();
-		context.fillStyle = "green";
-		context.fillRect(canvas.width / 4, canvas.height / 4, canvas.width / 2, canvas.height / 2.5);
-		context.fill();
-		context.stroke();
+		context.fillStyle = fillStyle || "rgba(0, 0, 0, 0.75)";
 		context.strokeStyle = "black";
-		context.fillStyle = "black";
-		context.font = "40px Courier";
-		context.fillText("You Win!", (canvas.width / 4) + 26, (canvas.height / 4) + 40);
-		context.font = "20px Courier";
-		context.fillText("(next level)", (canvas.width / 4) + 30, (canvas.height / 4) + 170);
-		/*
-		context.fill();
-		context.stroke();
-		context.font = "20px Verdana";
-		context.fillText("Enemies Killed: " + score, (canvas.width / 4) + 20, (canvas.height / 4) + 80);
-		context.fillText("Accuracy: " + accuracy.toFixed(2) + "%", (canvas.width / 4) + 20, (canvas.height / 4) + 110);
-		context.fillText("Enemies Spawned: " + enemiesSpawned, (canvas.width / 4) + 10, (canvas.height / 4) + 140);
-		context.fill();
-		context.stroke();
-		*/
-		window.setTimeout( function() { 
-			
-			loadLevel3();
-		
-		 }, 1000);
+		context.lineWidth = 3;
+		context.fillRect(boxX, boxY, boxW, boxH);
+		context.strokeRect(boxX, boxY, boxW, boxH);
+
+		context.fillStyle = "white";
+		context.textAlign = "center";
+		context.textBaseline = "top";
+
+		context.font = "36px Courier";
+		context.fillText(title, boxX + boxW / 2, boxY + 18);
+
+		context.font = "18px Courier";
+		var y = boxY + 72;
+		if (lines && lines.length) {
+			for (var i = 0; i < lines.length; i++) {
+				context.fillText(lines[i], boxX + boxW / 2, y);
+				y += 24;
+			}
+		}
+
+		if (footer) {
+			context.font = "16px Courier";
+			context.fillText(footer, boxX + boxW / 2, boxY + boxH - 34);
+		}
+
+		context.restore();
 	}
-	
-	
-	
-	function youLose() {
-		context.save();
-		context.beginPath();
-		context.fillStyle = "red";
-		context.fillRect(canvas.width / 4, canvas.height / 4, canvas.width / 2, canvas.height / 2.5);
-		context.fill();
-		context.stroke();
-		context.strokeStyle = "black";
-		context.fillStyle = "black";
-		context.font = "40px Courier";
-		context.fillText("You Lose!", (canvas.width / 4) + 26, (canvas.height / 4) + 40);
-		context.font = "20px Courier";
-		context.fillText("(click to restart)", (canvas.width / 4) + 30, (canvas.height / 4) + 170);
-		/*
-		context.fill();
-		context.stroke();
-		context.font = "20px Verdana";
-		context.fillText("Enemies Killed: " + score, (canvas.width / 4) + 20, (canvas.height / 4) + 80);
-		context.fillText("Accuracy: " + accuracy.toFixed(2) + "%", (canvas.width / 4) + 20, (canvas.height / 4) + 110);
-		context.fillText("Enemies Spawned: " + enemiesSpawned, (canvas.width / 4) + 10, (canvas.height / 4) + 140);
-		context.fill();
-		context.stroke();
-		*/
-		window.setTimeout( function() { 
-		
-		
-		//canvas.addEventListener('mousedown', function () {
-			context.restore();
-			location.reload();
-		//}, false);
-		 }, 1000);
+
+	function drawTitleScreen() {
+		drawOverlayBox(
+			"PROBES!",
+			[
+				"Use gravity to land flags on planets.",
+				"Claim " + (claimsNeeded || 0) + " planet(s) to win a level.",
+				"",
+				"Mouse: aim. Click: fire (in-game).",
+				"Enter/Click: continue"
+			],
+			"Press Enter or click to continue",
+			"rgba(20, 20, 20, 0.85)"
+		);
+	}
+
+	function drawLevelSelectScreen() {
+		var lines = [];
+		var maxIdx = Math.max(0, unlockedLevelCount - 1);
+		var maxNameIdx = Math.max(0, (LEVEL_NAMES.length || 1) - 1);
+		var end = Math.min(maxIdx, maxNameIdx);
+
+		lines.push("Select a level:");
+		lines.push("");
+
+		for (var i = 0; i <= end; i++) {
+			var isSel = (i === selectedLevelIndex);
+			var name = LEVEL_NAMES[i] || ("Level " + (i + 1));
+			lines.push((isSel ? "> " : "  ") + name);
+		}
+
+		lines.push("");
+		lines.push("Up/Down: choose   Enter/Click: start");
+		lines.push("Esc: back to title");
+
+		drawOverlayBox("LEVEL SELECT", lines, null, "rgba(20, 20, 20, 0.85)");
+	}
+
+	function drawPauseOverlay() {
+		drawOverlayBox(
+			"PAUSED",
+			[
+				"Esc: resume",
+				"R: restart level",
+				"L: level select"
+			],
+			"Click or press Esc to resume",
+			"rgba(20, 20, 20, 0.80)"
+		);
+	}
+
+	function drawWinOverlay() {
+		var hasNext = (currentLevelIndex + 1) < (LEVEL_LOADERS.length || 0);
+		drawOverlayBox(
+			"YOU WIN!",
+			[
+				"Planets claimed: " + flaggedCount + " / " + claimsNeeded,
+				"",
+				(hasNext ? "Enter/Click: next level" : "Enter/Click: level select"),
+				"R: restart level   L: level select"
+			],
+			null,
+			"rgba(20, 120, 40, 0.85)"
+		);
+	}
+
+	function drawLoseOverlay() {
+		drawOverlayBox(
+			"YOU LOSE!",
+			[
+				"Out of flags.",
+				"Planets claimed: " + flaggedCount + " / " + claimsNeeded,
+				"",
+				"Enter/Click: restart level",
+				"R: restart level   L: level select"
+			],
+			null,
+			"rgba(150, 20, 20, 0.85)"
+		);
 	}
 	
 	function loadLevel2 () {
@@ -704,9 +855,11 @@
 		flags.length = 0;
 		
 		ship.x = -100;
+		ship.y = 25;
 		flagCount = 3;
 		flaggedCount = 0;
 		claimsNeeded = 2;
+		levelCount = 2;
 		
 		//Level 2
 		planets[0] = new Planet (20);
@@ -723,8 +876,6 @@
 		planets[1].targetX = planets[0].x;
 		planets[1].targetY = planets[0].y;	
 		planets[1].orbit = true;
-		
-		levelCount++;
 		canFire = true;
 	}
 	
@@ -733,12 +884,12 @@
 		planets.length = 0;
 		flags.length = 0;
 		
-		canFire = true;
-		
 		ship.x = -100;
+		ship.y = 25;
 		flagCount = 3;
 		flaggedCount = 0;
 		claimsNeeded = 2;
+		levelCount = 3;
 		
 		//Level 3
 		planets[0] = new Planet (20);
@@ -779,18 +930,170 @@
 		planets[3].color = "white";
 		planets[3].enemy = true;
 		*/
-		
-		
-		levelCount++;
+		canFire = true;
 		//end level 3
 	}
+
+	function loadLevel1 () {
+		//clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
+
+		ship.x = -100;
+		ship.y = 25;
+		claimsNeeded = 1;
+		levelCount = 1;
+
+		flagCount = 8;
+		flaggedCount = 0;
+		canFire = true;
+
+		//Level 1
+		planets[0] = new Planet (5);
+		planets[0].sun = true;
+		planets[0].color = "yellow";
+		planets[0].radius = 45;
+		planets[0].gravityRadius = 200;
+		planets[0].targetX = planets[0].x;
+		planets[0].targetY = planets[0].y;
+		planets[0].orbit = false;
+		
+		planets[1] = new Planet (25);
+		planets[1].x = canvas.width / 2;
+		planets[1].y = canvas.height - 80;
+		planets[1].targetX = canvas.width/2;
+		planets[1].targetY = canvas.height - 80;
+		//End Level 1
+	}
+
+	// level list (used by state machine + level select)
+	LEVEL_LOADERS = [loadLevel1, loadLevel2, loadLevel3];
+	LEVEL_NAMES = ["Level 1", "Level 2", "Level 3"];
+	unlockedLevelCount = clampInt(unlockedLevelCount, 1, LEVEL_LOADERS.length);
+	saveUnlockedLevelCount();
 	
 	
 	//---------Window Load------------
 	
 	canvas.addEventListener('mousedown', function () {
-		if (canFire === true){
-			shootFlag();   //fire new flag	
+		if (gameState === GAME_STATE.PLAYING) {
+			if (canFire === true){
+				shootFlag();   //fire new flag
+			}
+			return;
+		}
+
+		if (gameState === GAME_STATE.TITLE) {
+			goToLevelSelect();
+			return;
+		}
+
+		if (gameState === GAME_STATE.LEVEL_SELECT) {
+			startSelectedLevel();
+			return;
+		}
+
+		if (gameState === GAME_STATE.PAUSED) {
+			setGameState(GAME_STATE.PLAYING);
+			return;
+		}
+
+		if (gameState === GAME_STATE.WIN) {
+			goToNextLevel();
+			return;
+		}
+
+		if (gameState === GAME_STATE.LOSE) {
+			restartLevel();
+			return;
+		}
+	}, false);
+
+	window.addEventListener('keydown', function (e) {
+		var key = e && e.key;
+		var code = e && (e.keyCode || e.which);
+
+		// normalize for older browsers
+		if (!key && code) {
+			if (code === 13) key = 'Enter';
+			if (code === 27) key = 'Escape';
+			if (code === 38) key = 'ArrowUp';
+			if (code === 40) key = 'ArrowDown';
+			if (code === 82) key = 'r';
+			if (code === 76) key = 'l';
+		}
+
+		// global-ish controls (except title/level select)
+		if (key === 'Escape' || code === 27) {
+			if (gameState === GAME_STATE.PLAYING) {
+				setGameState(GAME_STATE.PAUSED);
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+			if (gameState === GAME_STATE.PAUSED) {
+				setGameState(GAME_STATE.PLAYING);
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+			if (gameState === GAME_STATE.LEVEL_SELECT) {
+				goToTitle();
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+		}
+
+		// title -> level select
+		if (key === 'Enter' || code === 13) {
+			if (gameState === GAME_STATE.TITLE) {
+				goToLevelSelect();
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+			if (gameState === GAME_STATE.LEVEL_SELECT) {
+				startSelectedLevel();
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+			if (gameState === GAME_STATE.WIN) {
+				goToNextLevel();
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+			if (gameState === GAME_STATE.LOSE) {
+				restartLevel();
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+		}
+
+		// level select navigation
+		if (gameState === GAME_STATE.LEVEL_SELECT) {
+			if (key === 'ArrowUp' || code === 38) {
+				selectedLevelIndex = clampInt(selectedLevelIndex - 1, 0, unlockedLevelCount - 1);
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+			if (key === 'ArrowDown' || code === 40) {
+				selectedLevelIndex = clampInt(selectedLevelIndex + 1, 0, unlockedLevelCount - 1);
+				e && e.preventDefault && e.preventDefault();
+				return;
+			}
+		}
+
+		// restart
+		if ((key === 'r' || key === 'R' || code === 82) &&
+			(gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.PAUSED || gameState === GAME_STATE.WIN || gameState === GAME_STATE.LOSE)) {
+			restartLevel();
+			e && e.preventDefault && e.preventDefault();
+			return;
+		}
+
+		// level select shortcut
+		if ((key === 'l' || key === 'L' || code === 76) &&
+			(gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.PAUSED || gameState === GAME_STATE.WIN || gameState === GAME_STATE.LOSE)) {
+			goToLevelSelect();
+			e && e.preventDefault && e.preventDefault();
+			return;
 		}
 	}, false);
 	
@@ -811,30 +1114,12 @@
 	
 	enemies[0] = new Enemy();
 	
-	//load first level on window load
-	//Level 1
-	planets[0] = new Planet (5);
-	planets[0].sun = true;
-	planets[0].color = "yellow";
-	planets[0].radius = 45;
-	planets[0].gravityRadius = 200;
-	planets[0].targetX = planets[0].x;
-	planets[0].targetY = planets[0].y;
-	planets[0].orbit = false;
-	
-	planets[1] = new Planet (25);
-	planets[1].x = canvas.width / 2;
-	planets[1].y = canvas.height - 80;
-	planets[1].targetX = canvas.width/2;
-	planets[1].targetY = canvas.height - 80;
-	//End Level 1
-	
 	var claimsNeeded = 1;
 	var levelCount = 1;
 	
-	var flagCount = 8;
+	var flagCount = 0;
 	var distanceWeight = 10;
-	var canFire = true;
+	var canFire = false;
 	var coolDownMs = 500;  //time between firing flags
 	var bulletSpawnDelayMs = 500;
 	var flaggedCount = 0;
@@ -848,99 +1133,156 @@
 	for (var i = 0; i < starCount; i++) {
 		stars[i] = new Star(utils.getRandomInt(0, canvas.width), utils.getRandomInt(0, canvas.height));
 	}
+
+	function updateAndDrawWorld(doUpdate) {
+		// ship
+		if (doUpdate) {
+			setTurretAngle(ship);
+			ship.update();
+		}
+		ship.draw();
+
+		// planets + gravity/landing
+		for (var i = 0; i < planets.length; i++) {
+			var planet = planets[i];
+			if (doUpdate) {
+				planet.update();
+			}
+			planet.draw();
+
+			if (doUpdate && flags.length > 0) {
+				for (var c = 0; c < flags.length; c++) {
+					var flag = flags[c];
+					//only apply planetary forces if flag is in flight
+					if (flag.landed === false) {
+						applyForce(flag, planet);
+
+						if (checkLanding(flag, planet)) {
+							flag.onPlanet = i;    //set which planet the flag is on
+							if (planet.flagged === false && planet.sun === false) {
+								planet.flagged = true;
+								flaggedCount++;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// flags
+		for (var f = flags.length - 1; f >= 0; f--) {
+			var fl = flags[f];
+			if (fl.landed === true) {
+				if (planets[fl.onPlanet] && planets[fl.onPlanet].sun === true) {
+					resetEnemy(enemies[0]);
+					if (doUpdate) {
+						flags.splice(f, 1);
+						continue;
+					}
+				} else {
+					// keep flags stuck to orbiting planets
+					onPlanet(fl);
+				}
+			} else if (doUpdate) {
+				for (var e = 0; e < enemies.length; e++) {
+					checkPursuitRadius(fl, enemies[e]);
+				}
+			}
+
+			if (doUpdate) {
+				checkBoundary(fl);
+				fl.update();
+			}
+			fl.draw();
+		}
+
+		// enemies
+		for (var ei = 0; ei < enemies.length; ei++) {
+			var enemy = enemies[ei];
+
+			if (doUpdate && enemy.pursuing === true) {
+				if (flags.length > 0) {
+					pursue(enemy, flags[flags.length - 1]);
+				} else {
+					resetEnemy(enemy);
+				}
+			}
+
+			if (doUpdate) {
+				enemy.update();
+			}
+			enemy.draw();
+
+			if (doUpdate) {
+				//iterate backwards so removals via splice are safe
+				for (var fc = flags.length - 1; fc >= 0; fc--) {
+					var flg = flags[fc];
+					if (utils.areColliding(enemy.x, enemy.y, enemy.radius, flg.x, flg.y, flg.hitBox)) {
+						flags.splice(fc, 1);
+						resetEnemy(enemy);
+					}
+				}
+			}
+		}
+	}
 	
 	//game loop
 	(function update() {
 		window.requestAnimationFrame(update, canvas);
-		drawBackground();		
+		drawBackground();
 
 		if (DEV_MODE) {
 			updateDebugFps();
 		}
-				
-		setTurretAngle(ship);
-		ship.update();
-		ship.draw();
-		
-		for (var i = 0; i < planets.length; i++) {
-			var planet = planets[i];
-			planet.update();
-			planet.draw();
-			if (flags.length > 0) {
-				for (var c = 0; c < flags.length; c++) {
-				var flag = flags[c];
-				//only apply planetary forces if flag is in flight
-				if (flag.landed === false) {
-					applyForce(flag, planet);
-										
-					if (checkLanding(flag, planet)) {
-						flag.onPlanet = i;    //set which planet the flag is on
-						if (planet.flagged === false && planet.sun === false) {
-							planet.flagged = true;
-							flaggedCount++;						
-						} 
-					}
-				}
+
+		if (gameState === GAME_STATE.TITLE) {
+			drawTitleScreen();
+			if (DEV_MODE && DEBUG_OVERLAY) {
+				drawDebugOverlay();
 			}
-			}
+			return;
 		}
-		
-		
-		//iterate backwards so removals via splice are safe
-		for (var i = flags.length - 1; i >= 0; i--) {
-			var flag = flags[i];
-			if (flag.landed === true) {
-			
-				if (planets[flag.onPlanet].sun === true) {
-					resetEnemy(enemies[0]);
-					flags.splice(i, 1);
-					continue;
-				} else {
-					onPlanet(flag);	
-				}
-			} else {
-				for (var e = 0; e < enemies.length; e++) {
-					checkPursuitRadius(flag, enemies[e]);
-				}
+
+		if (gameState === GAME_STATE.LEVEL_SELECT) {
+			drawLevelSelectScreen();
+			if (DEV_MODE && DEBUG_OVERLAY) {
+				drawDebugOverlay();
 			}
-			
-		
-			
-			checkBoundary(flag);
-			flag.update();
-			flag.draw();
-		
+			return;
 		}
-		
-		for (var i = 0; i < enemies.length; i++) {
-			var enemy = enemies[i];
-			if (enemy.pursuing === true) {
-				pursue(enemy, flag);
+
+		if (gameState === GAME_STATE.PLAYING) {
+			updateAndDrawWorld(true);
+			drawHUD();
+
+			// win/lose transitions (no reload)
+			if (isWinCondition()) {
+				triggerWin();
+			} else if (flagCount === 0 && isLoseCondition()) {
+				triggerLose();
 			}
-			enemy.update();
-			enemy.draw();
-			//iterate backwards so removals via splice are safe
-			for (var c = flags.length - 1; c >= 0; c--) {
-				var flag = flags[c];
-				if (utils.areColliding(enemy.x, enemy.y, enemy.radius, flag.x, flag.y, flag.hitBox)) {
-					flags.splice(c, 1);
-					resetEnemy(enemy);
-				}
-				
+
+			if (DEV_MODE && DEBUG_OVERLAY) {
+				drawDebugOverlay();
 			}
-			
+			return;
 		}
-		
+
+		// PAUSED / WIN / LOSE: draw a frozen world (no updates), then overlay
+		updateAndDrawWorld(false);
 		drawHUD();
+
+		if (gameState === GAME_STATE.PAUSED) {
+			drawPauseOverlay();
+		} else if (gameState === GAME_STATE.WIN) {
+			drawWinOverlay();
+		} else if (gameState === GAME_STATE.LOSE) {
+			drawLoseOverlay();
+		}
+
 		if (DEV_MODE && DEBUG_OVERLAY) {
 			drawDebugOverlay();
 		}
-		if (flagCount === 0) {
-			if (checkLose()) {
-				youLose();
-			}
-		}
-		checkWin();
 		
 	}());
 	
