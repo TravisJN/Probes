@@ -1,10 +1,7 @@
 function loadNextLevel() {
-		for (var i = 0; i < planets.length; i++) {
-			planets.splice(i, 1);
-		}
-		for (var i = 0; i < flags.length; i++) {
-			flags.splice(i, 1);
-		}
+		//clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
 		
 		canFire = false;
 		flaggedCount = 0;
@@ -49,12 +46,9 @@ function loadNextLevel() {
 	
 	
 	function loadLevel2 () {
-		for (var i = 0; i < planets.length; i++) {
-			planets.splice(i, 1);
-		}
-		for (var i = 0; i < flags.length; i++) {
-			flags.splice(i, 1);
-		}
+		//clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
 		
 		ship.x = -100;
 		flagCount = 3;
@@ -81,12 +75,9 @@ function loadNextLevel() {
 	}
 	
 	function loadLevel3 () {
-		for (var i = 0; i < planets.length; i++) {
-			planets.splice(i, 1);
-		}
-		for (var i = 0; i < flags.length; i++) {
-			flags.splice(i, 1);
-		}
+		//clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
 		
 		canFire = true;
 		

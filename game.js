@@ -433,14 +433,15 @@
 		context.save();
 		context.beginPath();
 		context.strokeStyle = "white";
-		context.arc(hunter.targetX, hunter.targetY, hunter.wanderRadius, 0, 2*Math.PI, true);
+		//wanderRadius is not defined on our hunter types; use a safe, always-defined marker size
+		context.arc(hunter.targetX, hunter.targetY, (hunter && hunter.radius) ? hunter.radius : 6, 0, 2*Math.PI, true);
 		context.stroke();
 		context.restore();
 	}
 	
 	function checkPursuitRadius(flag, enemy) {
 		var dx = enemy.x - flag.x;
-		var dy = enemy.x - flag.y;
+		var dy = enemy.y - flag.y;
 		
 		var distance = Math.sqrt(dx * dx + dy * dy);
 		
@@ -698,12 +699,9 @@
 	}
 	
 	function loadLevel2 () {
-		for (var i = 0; i < planets.length; i++) {
-			planets.splice(i, 1);
-		}
-		for (var i = 0; i < flags.length; i++) {
-			flags.splice(i, 1);
-		}
+		//clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
 		
 		ship.x = -100;
 		flagCount = 3;
@@ -731,12 +729,9 @@
 	}
 	
 	function loadLevel3 () {
-		for (var i = 0; i < planets.length; i++) {
-			planets.splice(i, 1);
-		}
-		for (var i = 0; i < flags.length; i++) {
-			flags.splice(i, 1);
-		}
+		//clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
 		
 		canFire = true;
 		
@@ -891,20 +886,21 @@
 		}
 		
 		
-		for (var i = 0; i < flags.length; i++) {
+		//iterate backwards so removals via splice are safe
+		for (var i = flags.length - 1; i >= 0; i--) {
 			var flag = flags[i];
 			if (flag.landed === true) {
 			
 				if (planets[flag.onPlanet].sun === true) {
 					resetEnemy(enemies[0]);
 					flags.splice(i, 1);
+					continue;
 				} else {
 					onPlanet(flag);	
 				}
 			} else {
-				for (var i = 0; i < enemies.length; i++) {
-					var enemy = enemies[i];
-					checkPursuitRadius(flag, enemy);
+				for (var e = 0; e < enemies.length; e++) {
+					checkPursuitRadius(flag, enemies[e]);
 				}
 			}
 			
@@ -923,7 +919,8 @@
 			}
 			enemy.update();
 			enemy.draw();
-			for (var c = 0; c < flags.length; c++) {
+			//iterate backwards so removals via splice are safe
+			for (var c = flags.length - 1; c >= 0; c--) {
 				var flag = flags[c];
 				if (utils.areColliding(enemy.x, enemy.y, enemy.radius, flag.x, flag.y, flag.hitBox)) {
 					flags.splice(c, 1);
