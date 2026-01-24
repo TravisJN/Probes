@@ -56,6 +56,13 @@
 		try { localStorage.setItem('probes_unlocked_levels', String(unlockedLevelCount)); } catch (e) {}
 	}
 
+	function getLevelSelectCount() {
+		// In dev mode, allow selecting any level from the menu.
+		// Keep `unlockedLevelCount` for normal play / persistence.
+		if (DEV_MODE) return Math.max(1, (LEVEL_LOADERS.length || 1));
+		return Math.max(1, unlockedLevelCount);
+	}
+
 	function clampInt(n, min, max) {
 		n = (n | 0);
 		if (n < min) return min;
@@ -72,7 +79,8 @@
 	}
 
 	function goToLevelSelect() {
-		selectedLevelIndex = clampInt(selectedLevelIndex, 0, Math.max(0, unlockedLevelCount - 1));
+		var levelSelectCount = getLevelSelectCount();
+		selectedLevelIndex = clampInt(selectedLevelIndex, 0, Math.max(0, levelSelectCount - 1));
 		setGameState(GAME_STATE.LEVEL_SELECT);
 	}
 
@@ -786,7 +794,7 @@
 
 	function drawLevelSelectScreen() {
 		var lines = [];
-		var maxIdx = Math.max(0, unlockedLevelCount - 1);
+		var maxIdx = Math.max(0, getLevelSelectCount() - 1);
 		var maxNameIdx = Math.max(0, (LEVEL_NAMES.length || 1) - 1);
 		var end = Math.min(maxIdx, maxNameIdx);
 
@@ -847,6 +855,152 @@
 			null,
 			"rgba(150, 20, 20, 0.85)"
 		);
+	}
+
+	// ---------------- Levels (data-driven) ----------------
+
+	function getLevelListFromWindow() {
+		// levels.js defines `window.PROBES_LEVELS`
+		var list = (window && window.PROBES_LEVELS) ? window.PROBES_LEVELS : null;
+		return (list && list.length) ? list : null;
+	}
+
+	function resolveLevelCoord(val, axis) {
+		// axis: 'x'|'y'
+		var size = (axis === 'x') ? canvas.width : canvas.height;
+		if (typeof val === 'number') {
+			// 0..1 => fraction of canvas, otherwise pixels
+			if (val >= 0 && val <= 1) return val * size;
+			return val;
+		}
+
+		if (val && typeof val === 'object') {
+			var from = val.from;
+			var offset = (val.offset != null) ? val.offset : 0;
+			if (axis === 'x') {
+				if (from === 'left') return 0 + offset;
+				if (from === 'right') return canvas.width + offset;
+				if (from === 'center') return (canvas.width / 2) + offset;
+			} else {
+				if (from === 'top') return 0 + offset;
+				if (from === 'bottom') return canvas.height + offset;
+				if (from === 'center') return (canvas.height / 2) + offset;
+			}
+		}
+
+		// fallback to center
+		return (axis === 'x') ? (canvas.width / 2) : (canvas.height / 2);
+	}
+
+	function applyPlanetTarget(planet, targetSpec) {
+		if (targetSpec && targetSpec.self) {
+			planet.targetX = planet.x;
+			planet.targetY = planet.y;
+			return;
+		}
+
+		var idx = targetSpec ? targetSpec.planetIndex : null;
+		if (idx != null && planets[idx]) {
+			planet.targetX = planets[idx].x;
+			planet.targetY = planets[idx].y;
+			return;
+		}
+
+		// default: self (stationary)
+		planet.targetX = planet.x;
+		planet.targetY = planet.y;
+	}
+
+	function loadLevelFromData(level) {
+		// clear in-place (safe; doesn't skip elements)
+		planets.length = 0;
+		flags.length = 0;
+
+		// ship
+		var shipDef = level && level.ship ? level.ship : null;
+		if (shipDef) {
+			ship.x = resolveLevelCoord(shipDef.x, 'x');
+			ship.y = resolveLevelCoord(shipDef.y, 'y');
+		} else {
+			ship.x = -100;
+			ship.y = 25;
+		}
+		ship.vx = 0;
+		ship.vy = 0;
+		ship.steerX = 0;
+		ship.steerY = 0;
+
+		// objectives / state
+		flagCount = (level && level.flagCount != null) ? level.flagCount : 0;
+		flaggedCount = 0;
+		claimsNeeded = (level && level.claimsNeeded != null) ? level.claimsNeeded : 1;
+		levelCount = (level && level.id != null) ? level.id : (currentLevelIndex + 1);
+		canFire = (level && level.canFire != null) ? !!level.canFire : true;
+
+		// planets
+		var planetDefs = (level && level.planets && level.planets.length) ? level.planets : [];
+		var pendingTargets = [];
+
+		for (var i = 0; i < planetDefs.length; i++) {
+			var def = planetDefs[i] || {};
+			var p = new Planet((def.gravity != null) ? def.gravity : 0);
+
+			// position first (so targetX/targetY can default to self)
+			if (def.x != null) p.x = resolveLevelCoord(def.x, 'x');
+			if (def.y != null) p.y = resolveLevelCoord(def.y, 'y');
+
+			// config
+			if (def.radius != null) p.radius = def.radius;
+			if (def.gravityRadius != null) p.gravityRadius = def.gravityRadius;
+			if (def.color != null) p.color = def.color;
+			if (def.sun != null) p.sun = !!def.sun;
+			if (def.orbit != null) p.orbit = !!def.orbit;
+			if (def.orbitRadius != null) p.orbitRadius = def.orbitRadius;
+			if (def.orbitSpeed != null) p.orbitSpeed = def.orbitSpeed;
+			if (def.enemy != null) p.enemy = !!def.enemy;
+			if (def.pursuing != null) p.pursuing = !!def.pursuing;
+
+			// defaults
+			p.targetX = p.x;
+			p.targetY = p.y;
+
+			planets.push(p);
+			pendingTargets.push(def.target || null);
+		}
+
+		// apply targets after all planets exist
+		for (var j = 0; j < planets.length; j++) {
+			var t = pendingTargets[j];
+
+			// implicit default for orbiting planets: orbit planet[0] when possible
+			if (!t && planets[j].orbit && planets[0] && j !== 0) {
+				t = { planetIndex: 0 };
+			}
+
+			applyPlanetTarget(planets[j], t);
+		}
+	}
+
+	function initLevels() {
+		var dataLevels = getLevelListFromWindow();
+		if (dataLevels) {
+			LEVEL_LOADERS = [];
+			LEVEL_NAMES = [];
+
+			for (var i = 0; i < dataLevels.length; i++) {
+				(function (lvl, idx) {
+					LEVEL_LOADERS.push(function () { loadLevelFromData(lvl); });
+					LEVEL_NAMES.push((lvl && lvl.name) ? lvl.name : ("Level " + (lvl && lvl.id != null ? lvl.id : (idx + 1))));
+				}(dataLevels[i], i));
+			}
+		} else {
+			// fallback: original hardcoded levels
+			LEVEL_LOADERS = [loadLevel1, loadLevel2, loadLevel3];
+			LEVEL_NAMES = ["Level 1", "Level 2", "Level 3"];
+		}
+
+		unlockedLevelCount = clampInt(unlockedLevelCount, 1, LEVEL_LOADERS.length || 1);
+		saveUnlockedLevelCount();
 	}
 	
 	function loadLevel2 () {
@@ -967,10 +1121,7 @@
 	}
 
 	// level list (used by state machine + level select)
-	LEVEL_LOADERS = [loadLevel1, loadLevel2, loadLevel3];
-	LEVEL_NAMES = ["Level 1", "Level 2", "Level 3"];
-	unlockedLevelCount = clampInt(unlockedLevelCount, 1, LEVEL_LOADERS.length);
-	saveUnlockedLevelCount();
+	initLevels();
 	
 	
 	//---------Window Load------------
@@ -1069,12 +1220,12 @@
 		// level select navigation
 		if (gameState === GAME_STATE.LEVEL_SELECT) {
 			if (key === 'ArrowUp' || code === 38) {
-				selectedLevelIndex = clampInt(selectedLevelIndex - 1, 0, unlockedLevelCount - 1);
+				selectedLevelIndex = clampInt(selectedLevelIndex - 1, 0, getLevelSelectCount() - 1);
 				e && e.preventDefault && e.preventDefault();
 				return;
 			}
 			if (key === 'ArrowDown' || code === 40) {
-				selectedLevelIndex = clampInt(selectedLevelIndex + 1, 0, unlockedLevelCount - 1);
+				selectedLevelIndex = clampInt(selectedLevelIndex + 1, 0, getLevelSelectCount() - 1);
 				e && e.preventDefault && e.preventDefault();
 				return;
 			}

@@ -6,6 +6,7 @@ Use the gravities of the planetary bodies to try to land your probe on the habit
 ## How to run
 - Open `index.html` in a browser.
 - If your browser blocks local asset loading, run a small static server in this folder and open `index.html` through it.
+  - npm: `npx serve`
   - Python: `python -m http.server 8000` then open `http://localhost:8000/index.html`
 
 ## Dev mode
