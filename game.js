@@ -2,6 +2,29 @@
 	var canvas = document.getElementById('canvas'),
 		context = canvas.getContext('2d'),
 		mouse = utils.captureMouse(canvas);
+
+	//dev/debug (off by default; enable with ?dev=1)
+	var DEV_MODE = (function () {
+		try {
+			return (new URLSearchParams(window.location.search)).has('dev');
+		} catch (e) {
+			return (/(^|[?&])dev(=1|=true|&|$)/).test(window.location.search);
+		}
+	}());
+	var DEBUG_OVERLAY = false;
+	var __debug = { lastFpsT: 0, frames: 0, fps: 0 };
+
+	if (DEV_MODE) {
+		DEBUG_OVERLAY = true;
+		__debug.lastFpsT = (Date.now ? Date.now() : +new Date());
+		window.addEventListener('keydown', function (e) {
+			var code = e && (e.keyCode || e.which);
+			var key = e && e.key;
+			if (key === '`' || key === '~' || code === 192) {
+				DEBUG_OVERLAY = !DEBUG_OVERLAY;
+			}
+		}, false);
+	}
 		
 		//objects
 		function Ship (x, y) {
@@ -550,6 +573,47 @@
 		context.fillText("Planets claimed: " + flaggedCount + " / " + claimsNeeded, 20, canvas.height - 20);
 		context.restore();
 	}
+
+	function updateDebugFps() {
+		var now = (Date.now ? Date.now() : +new Date());
+		__debug.frames++;
+		if (now - __debug.lastFpsT >= 500) {
+			__debug.fps = (__debug.frames * 1000) / (now - __debug.lastFpsT);
+			__debug.frames = 0;
+			__debug.lastFpsT = now;
+		}
+	}
+
+	function drawDebugOverlay() {
+		//only call when DEV_MODE && DEBUG_OVERLAY
+		context.save();
+
+		context.globalAlpha = 0.85;
+		context.fillStyle = "rgba(0, 0, 0, 0.6)";
+		context.fillRect(8, 30, 260, 125);
+
+		context.globalAlpha = 1;
+		context.fillStyle = "white";
+		context.font = "12px monospace";
+
+		var x = 14;
+		var y = 48;
+		var lh = 14;
+
+		context.fillText("DEV overlay (` to toggle)", x, y); y += lh;
+		context.fillText("FPS: " + (__debug.fps ? __debug.fps.toFixed(1) : "..."), x, y); y += lh;
+		context.fillText("Mouse: " + Math.round(mouse.x) + ", " + Math.round(mouse.y), x, y); y += lh;
+
+		if (ship && ship.x != null && ship.y != null) {
+			context.fillText("Ship: " + ship.x.toFixed(1) + ", " + ship.y.toFixed(1), x, y); y += lh;
+			context.fillText("Ship v: " + ship.vx.toFixed(2) + ", " + ship.vy.toFixed(2), x, y); y += lh;
+		}
+
+		context.fillText("Flags: " + (flags ? flags.length : 0) + " (left " + flagCount + ")", x, y); y += lh;
+		context.fillText("Planets: " + (planets ? planets.length : 0) + " | Enemies: " + (enemies ? enemies.length : 0), x, y);
+
+		context.restore();
+	}
 	
 	function checkWin() {
 		if (flaggedCount === claimsNeeded) {
@@ -794,6 +858,10 @@
 	(function update() {
 		window.requestAnimationFrame(update, canvas);
 		drawBackground();		
+
+		if (DEV_MODE) {
+			updateDebugFps();
+		}
 				
 		setTurretAngle(ship);
 		ship.update();
@@ -867,6 +935,9 @@
 		}
 		
 		drawHUD();
+		if (DEV_MODE && DEBUG_OVERLAY) {
+			drawDebugOverlay();
+		}
 		if (flagCount === 0) {
 			if (checkLose()) {
 				youLose();
