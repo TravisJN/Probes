@@ -105,7 +105,7 @@
 	}
 
 	function restartLevel() {
-		startLevel(currentLevelIndex);
+		resetLevel();
 	}
 
 	function startSelectedLevel() {
@@ -180,7 +180,6 @@
 		this.maxVelocity = 5;
 		
 		this.jumpForce = 25;
-		//this.onShip = true;
 		this.landed = false;
 		this.onPlanet;
 		
@@ -229,7 +228,6 @@
 		this.y = canvas.height - 120;
 		this.radius = 6;
 		
-		//this.gravity = gravity;
 		this.gravityRadius = 125;   //gravity force is only applied within this distance to planet
 		
 		this.spring = 0;
@@ -249,29 +247,6 @@
 		
 		this.pursuing = false;
 		this.pursuitRadius = 75;	//how close the flag needs to be in order for enemy to start pursuing
-		
-		/*
-		planets[3].radius = 6;
-		planets[3].x = canvas.width / 2;
-		planets[3].y = canvas.height - 120;
-		planets[3].targetX = planets[0].x;
-		planets[3].targetY = planets[0].y;	
-		planets[3].orbit = true;
-		planets[3].orbitRadius = 150;
-		planets[3].orbitSpeed = 0.05;
-		*/
-	}
-	
-	function Bullet(x, y, targetx, targety) {
-		this.x = x;
-		this.y = y;
-		this.damage = 1;
-		this.velocity = 7;
-		this.radius = 7;
-		this.color = "red";
-		this.targetx = targetx;
-		this.targety = targety;
-		this.angle = 0;
 	}
 	
 	//prototypes
@@ -307,15 +282,6 @@
 		context.rotate(this.orientation);
 		context.fillRect(0 - this.turretWidth / 2, 0, this.turretWidth, this.turretHeight);
 		context.fill();
-		
-		//art
-		
-		
-		//spaceship.onload = function () {
-			//context.drawImage(spaceship, 0, 0);
-		//}
-		
-		
 		context.restore();
 	}
 	
@@ -331,7 +297,6 @@
 		context.beginPath();
 		context.strokeStyle = "green";
 		context.fillStyle = "green";
-		//context.arc(this.x, this.y - this.height, this.headRadius, 0, 2*Math.PI, true);
 		context.arc(0, 0 - this.height, this.headRadius, 0, 2*Math.PI, true);
 		context.stroke();
 		context.fill();
@@ -349,13 +314,6 @@
 			context.drawImage(sunpic, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
 		} else {
 			context.drawImage(planetpic, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
-		/*
-			context.beginPath();
-			context.fillStyle = this.color;
-			context.arc(this.x, this.y, this.radius, 0, 2*Math.PI, true);
-			context.fill();
-			context.stroke();
-			*/
 		}
 		context.restore();
 	}
@@ -388,13 +346,6 @@
 			this.x = this.vx;
 			this.y = this.vy;
 		}
-		//this.vx += ax;
-		//this.vx += this.friction;
-		//this.x += this.vx;
-		//this.y += this.vy;
-		
-		
-		
 	}
 	
 	Ship.prototype.update = function () {
@@ -468,14 +419,11 @@
 			this.x = this.vx;
 			this.y = this.vy;
 		} else if (this.pursuing === true) {
-			//this.vx = this.targetX + Math.cos(angle) * this.orbitRadius;
-			//this.vy = this.targetY + Math.sin(angle) * this.orbitRadius;
 			this.vx = this.x + Math.cos(angle) * this.maxVelocity;
 			this.vy = this.y + Math.sin(angle) * this.maxVelocity;
 			
 			this.x = this.vx;
 			this.y = this.vy;
-			//console.log(this.x + " " + this.y);
 		}
 	}
 	
@@ -529,12 +477,6 @@
 		
 		dx = prey.x - hunter.x;
 		dy = prey.y - hunter.y;
-		
-		speed = Math.sqrt(prey.vx * prey.vx + prey.vy * prey.vy);
-		distanceToTarget = Math.sqrt(dx * dx + dy * dy);
-		
-		//hunter.targetX = prey.x + Math.cos(prey.orientation) * speed * (distanceToTarget / lookAheadScale);
-		//hunter.targetY = prey.y + Math.sin(prey.orientation) * speed * (distanceToTarget / lookAheadScale);
 		
 		hunter.targetX = prey.x;
 		hunter.targetY = prey.y;
@@ -615,28 +557,14 @@
 		if (utils.areColliding(flag.x, flag.y, flag.hitBox, planet.x, planet.y, planet.radius)) {
 			flag.vx = 0;
 			flag.vy = 0;
-					
-			//flag.x = Math.cos(flag.orientation) * planet.radius + planet.x;
-			//flag.y = Math.sin(flag.orientation) * planet.radius + planet.y;
-			var dx, dy;
-			var distance;
 			
-			dx = planet.x - flag.x;
-			dy = planet.y - flag.y;
-			
-			distance = Math.sqrt(dx * dx + dy * dy);
-			
+			var dx = planet.x - flag.x;
+			var dy = planet.y - flag.y;
 			var currentAngle = Math.atan2(dy, dx);
+			var flagOrientation = currentAngle + Math.PI;  //add Math.PI otherwise agent appears inside of planet
+			flag.x = (Math.cos(flagOrientation) * planet.radius + planet.x);
+			flag.y = (Math.sin(flagOrientation) * planet.radius + planet.y);
 			
-			
-			//if (distance < planet.radius) {
-				var flagOrientation = currentAngle + Math.PI;  //add Math.PI otherwise agent appears inside of planet
-				flag.x = (Math.cos(flagOrientation) * planet.radius + planet.x);
-				flag.y = (Math.sin(flagOrientation) * planet.radius + planet.y);
-			//}
-			
-			//canFire = true;
-			//flag.orientation = flagOrientation;
 			flag.landed = true;
 			return true;
 			
@@ -981,6 +909,88 @@
 		}
 	}
 
+	function findLevelById(levelId) {
+		// Find a level data object by its ID
+		var dataLevels = getLevelListFromWindow();
+		if (!dataLevels || !dataLevels.length) {
+			return null;
+		}
+
+		for (var i = 0; i < dataLevels.length; i++) {
+			if (dataLevels[i] && dataLevels[i].id === levelId) {
+				return { level: dataLevels[i], index: i };
+			}
+		}
+
+		return null;
+	}
+
+	function findLevelByIndex(levelIndex) {
+		// Find a level data object by its array index
+		var dataLevels = getLevelListFromWindow();
+		if (!dataLevels || levelIndex < 0 || levelIndex >= dataLevels.length) {
+			return null;
+		}
+
+		return dataLevels[levelIndex];
+	}
+
+	function loadLevel(levelId) {
+		// Load a level by its ID (from level data objects)
+		var result = findLevelById(levelId);
+		if (!result) {
+			// Fallback: if level not found by ID, try using levelId as index
+			var fallbackLevel = findLevelByIndex(levelId);
+			if (fallbackLevel) {
+				currentLevelIndex = levelId;
+				selectedLevelIndex = currentLevelIndex;
+				loadLevelFromData(fallbackLevel);
+			} else {
+				// If still not found, use the existing loader system as fallback
+				if (LEVEL_LOADERS && LEVEL_LOADERS[levelId - 1]) {
+					currentLevelIndex = levelId - 1;
+					selectedLevelIndex = currentLevelIndex;
+					LEVEL_LOADERS[currentLevelIndex]();
+				}
+				return;
+			}
+		} else {
+			currentLevelIndex = result.index;
+			selectedLevelIndex = currentLevelIndex;
+			loadLevelFromData(result.level);
+		}
+
+		// after the level is loaded, enemies can safely reference planets[0]
+		if (enemies && enemies.length) {
+			for (var i = 0; i < enemies.length; i++) {
+				resetEnemy(enemies[i]);
+			}
+		}
+
+		setGameState(GAME_STATE.PLAYING);
+	}
+
+	function resetLevel() {
+		// Reset the current level to its initial state
+		var currentLevel = findLevelByIndex(currentLevelIndex);
+		if (currentLevel) {
+			// Use data-driven loading
+			loadLevelFromData(currentLevel);
+		} else if (LEVEL_LOADERS && LEVEL_LOADERS[currentLevelIndex]) {
+			// Fallback to loader function if data not available
+			LEVEL_LOADERS[currentLevelIndex]();
+		}
+
+		// after the level is loaded, enemies can safely reference planets[0]
+		if (enemies && enemies.length) {
+			for (var i = 0; i < enemies.length; i++) {
+				resetEnemy(enemies[i]);
+			}
+		}
+
+		setGameState(GAME_STATE.PLAYING);
+	}
+
 	function initLevels() {
 		var dataLevels = getLevelListFromWindow();
 		if (dataLevels) {
@@ -1070,20 +1080,6 @@
 		planets[2].orbit = true;
 		planets[2].orbitRadius = 175;
 		planets[2].orbitSpeed = 0.01;
-		
-		/*
-		planets[3] = new Planet (3);
-		planets[3].radius = 6;
-		planets[3].x = canvas.width / 2;
-		planets[3].y = canvas.height - 120;
-		planets[3].targetX = planets[0].x;
-		planets[3].targetY = planets[0].y;	
-		planets[3].orbit = true;
-		planets[3].orbitRadius = 150;
-		planets[3].orbitSpeed = 0.05;
-		planets[3].color = "white";
-		planets[3].enemy = true;
-		*/
 		canFire = true;
 		//end level 3
 	}
@@ -1249,13 +1245,11 @@
 	}, false);
 	
 	//art
-	var spaceship = new Image();
 	var sunpic = new Image();
 	var planetpic = new Image();
 	
 	planetpic.src = "images/planet.jpg";
 	sunpic.src = "images/sunpicture1.jpg";
-	spaceship.src = "images/ship.png";
 	
 	//create agents
 	var ship = new Ship (-100, 25);
@@ -1272,9 +1266,7 @@
 	var distanceWeight = 10;
 	var canFire = false;
 	var coolDownMs = 500;  //time between firing flags
-	var bulletSpawnDelayMs = 500;
 	var flaggedCount = 0;
-	//var enemyCanFire = true;
 	
 	//draw random starry background
 	var stars = [];
