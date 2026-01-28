@@ -1369,9 +1369,37 @@
 		}
 	}
 	
+	// FPS locking at 60 FPS
+	var TARGET_FPS = 60;
+	var FRAME_TIME_MS = 1000 / TARGET_FPS; // ~16.67ms per frame
+	var lastFrameTime = (Date.now ? Date.now() : +new Date());
+	var accumulatedTime = 0;
+
 	//game loop
 	(function update() {
 		window.requestAnimationFrame(update, canvas);
+		
+		var currentTime = (Date.now ? Date.now() : +new Date());
+		var deltaTime = currentTime - lastFrameTime;
+		lastFrameTime = currentTime;
+		
+		// Cap deltaTime to prevent large jumps (e.g., tab switching)
+		if (deltaTime > 100) {
+			deltaTime = 100;
+		}
+		
+		accumulatedTime += deltaTime;
+		
+		// Only update game logic when enough time has accumulated
+		var shouldUpdate = (accumulatedTime >= FRAME_TIME_MS);
+		if (shouldUpdate) {
+			accumulatedTime -= FRAME_TIME_MS;
+			// Keep accumulatedTime from growing too large
+			if (accumulatedTime > FRAME_TIME_MS) {
+				accumulatedTime = FRAME_TIME_MS;
+			}
+		}
+		
 		drawBackground();
 
 		if (DEV_MODE) {
@@ -1395,14 +1423,16 @@
 		}
 
 		if (gameState === GAME_STATE.PLAYING) {
-			updateAndDrawWorld(true);
+			updateAndDrawWorld(shouldUpdate);
 			drawHUD();
 
 			// win/lose transitions (no reload)
-			if (isWinCondition()) {
-				triggerWin();
-			} else if (flagCount === 0 && isLoseCondition()) {
-				triggerLose();
+			if (shouldUpdate) {
+				if (isWinCondition()) {
+					triggerWin();
+				} else if (flagCount === 0 && isLoseCondition()) {
+					triggerLose();
+				}
 			}
 
 			if (DEV_MODE && DEBUG_OVERLAY) {
