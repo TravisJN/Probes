@@ -3,9 +3,29 @@
 <head>
 	<meta charset="utf-8">
 	<title>Probes!</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			min-height: 100vh;
+			background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+			font-family: 'Courier New', monospace;
+		}
+		canvas {
+			display: block;
+			border: 3px solid #4a9eff;
+			border-radius: 4px;
+			box-shadow: 0 0 20px rgba(74, 158, 255, 0.3),
+			            0 0 40px rgba(74, 158, 255, 0.1),
+			            inset 0 0 20px rgba(0, 0, 0, 0.5);
+		}
+	</style>
 </head>
 <body>
-	<canvas id="canvas" width="500" height="500"></canvas>
+	<canvas id="canvas" width="1280" height="720"></canvas>
 	<script src="utils.js"></script>
 	<script src="levels.js"></script>
 	<script src="game.js"></script>

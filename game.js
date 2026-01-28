@@ -605,11 +605,73 @@
 	
 	function drawHUD() {
 		context.save();
-		context.fillStyle = "white";
-		context.font = "20px Terminal";
-		context.fillText("Flags: " + flagCount, 10, 20);
-		context.fillText("Planets claimed: " + flaggedCount + " / " + claimsNeeded, 20, canvas.height - 20);
+		
+		// Draw semi-transparent background panels for better readability
+		var panelPadding = 12;
+		var panelHeight = 40;
+		var cornerRadius = 6;
+		
+		// Top panel (Flags)
+		var topPanelY = 8;
+		var topPanelW = 180;
+		context.fillStyle = "rgba(0, 0, 0, 0.7)";
+		context.strokeStyle = "#4a9eff";
+		context.lineWidth = 2;
+		drawRoundedRect(context, panelPadding, topPanelY, topPanelW, panelHeight, cornerRadius);
+		context.fill();
+		context.stroke();
+		
+		// Bottom panel (Planets claimed)
+		var bottomPanelY = canvas.height - panelHeight - 8;
+		var bottomPanelW = 320;
+		context.fillStyle = "rgba(0, 0, 0, 0.7)";
+		context.strokeStyle = "#4a9eff";
+		context.lineWidth = 2;
+		drawRoundedRect(context, panelPadding, bottomPanelY, bottomPanelW, panelHeight, cornerRadius);
+		context.fill();
+		context.stroke();
+		
+		// Draw text with shadow for better visibility
+		context.fillStyle = "#ffffff";
+		context.font = "bold 20px 'Courier New', monospace";
+		context.textAlign = "left";
+		context.textBaseline = "top";
+		
+		// Text shadow
+		context.shadowColor = "rgba(0, 0, 0, 0.8)";
+		context.shadowBlur = 4;
+		context.shadowOffsetX = 2;
+		context.shadowOffsetY = 2;
+		
+		context.fillText("Flags: " + flagCount, panelPadding + 8, topPanelY + 10);
+		
+		// Reset shadow for bottom text
+		context.shadowBlur = 0;
+		context.shadowOffsetX = 0;
+		context.shadowOffsetY = 0;
+		context.shadowColor = "rgba(0, 0, 0, 0.8)";
+		context.shadowBlur = 4;
+		context.shadowOffsetX = 2;
+		context.shadowOffsetY = 2;
+		
+		context.fillText("Planets claimed: " + flaggedCount + " / " + claimsNeeded, panelPadding + 8, bottomPanelY + 10);
+		
 		context.restore();
+	}
+	
+	// Helper function to draw rounded rectangles
+	function drawRoundedRect(ctx, x, y, width, height, radius) {
+		ctx.beginPath();
+		ctx.moveTo(x + radius, y);
+		ctx.lineTo(x + width - radius, y);
+		ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+		ctx.lineTo(x + width, y + height - radius);
+		ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+		ctx.lineTo(x + radius, y + height);
+		ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+		ctx.lineTo(x, y + radius);
+		ctx.quadraticCurveTo(x, y, x + radius, y);
+		ctx.closePath();
 	}
 
 	function updateDebugFps() {
@@ -672,35 +734,68 @@
 		var boxH = Math.floor(canvas.height * 0.46);
 		var boxX = Math.floor((canvas.width - boxW) / 2);
 		var boxY = Math.floor((canvas.height - boxH) / 2);
+		var cornerRadius = 12;
 
 		context.save();
-		context.beginPath();
-		context.fillStyle = fillStyle || "rgba(0, 0, 0, 0.75)";
-		context.strokeStyle = "black";
+		
+		// Draw shadow
+		context.fillStyle = "rgba(0, 0, 0, 0.5)";
+		drawRoundedRect(context, boxX + 4, boxY + 4, boxW, boxH, cornerRadius);
+		context.fill();
+		
+		// Draw main box
+		context.fillStyle = fillStyle || "rgba(0, 0, 0, 0.85)";
+		context.strokeStyle = "#4a9eff";
 		context.lineWidth = 3;
-		context.fillRect(boxX, boxY, boxW, boxH);
-		context.strokeRect(boxX, boxY, boxW, boxH);
+		drawRoundedRect(context, boxX, boxY, boxW, boxH, cornerRadius);
+		context.fill();
+		context.stroke();
+		
+		// Inner glow effect
+		context.strokeStyle = "rgba(74, 158, 255, 0.3)";
+		context.lineWidth = 1;
+		drawRoundedRect(context, boxX + 2, boxY + 2, boxW - 4, boxH - 4, cornerRadius - 2);
+		context.stroke();
 
 		context.fillStyle = "white";
 		context.textAlign = "center";
 		context.textBaseline = "top";
+		
+		// Text shadow for title
+		context.shadowColor = "rgba(0, 0, 0, 0.8)";
+		context.shadowBlur = 6;
+		context.shadowOffsetX = 2;
+		context.shadowOffsetY = 2;
 
-		context.font = "36px Courier";
-		context.fillText(title, boxX + boxW / 2, boxY + 18);
+		context.font = "bold 42px 'Courier New', monospace";
+		context.fillText(title, boxX + boxW / 2, boxY + 20);
 
-		context.font = "18px Courier";
-		var y = boxY + 72;
+		// Reset shadow for body text
+		context.shadowBlur = 0;
+		context.shadowOffsetX = 0;
+		context.shadowOffsetY = 0;
+		context.shadowColor = "rgba(0, 0, 0, 0.6)";
+		context.shadowBlur = 3;
+		context.shadowOffsetX = 1;
+		context.shadowOffsetY = 1;
+
+		context.font = "18px 'Courier New', monospace";
+		var y = boxY + 80;
 		if (lines && lines.length) {
 			for (var i = 0; i < lines.length; i++) {
 				context.fillText(lines[i], boxX + boxW / 2, y);
-				y += 24;
+				y += 26;
 			}
 		}
 
 		if (footer) {
-			context.font = "16px Courier";
-			context.fillText(footer, boxX + boxW / 2, boxY + boxH - 34);
+			context.font = "16px 'Courier New', monospace";
+			context.fillText(footer, boxX + boxW / 2, boxY + boxH - 36);
 		}
+		
+		context.shadowBlur = 0;
+		context.shadowOffsetX = 0;
+		context.shadowOffsetY = 0;
 
 		context.restore();
 	}
